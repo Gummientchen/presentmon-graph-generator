@@ -17,13 +17,8 @@ args = parser.parse_args()
 
 if args.Input:
     inputFilename = args.Input
-else:
-    exit()
-
 
 n_bins = args.Bins
-    
-
 
 
 def main():
