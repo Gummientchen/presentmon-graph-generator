@@ -12,7 +12,6 @@ This tool helps visualize PresentMon logs.
 | -t     | -Title      | Set custom title which is shown at the top of generated image                       |
 | -b     | -Bins       | Defines how many bins should be used for histograms                                 |
 | -d     | -Theme      | Lets you choose between dark and light mode. Default dark. Options: "dark", "light" |
-| -s     | -ShowWindow | If set shows a preview window of the graph (image still gets stored)                |
 | -p     | -Pdf        | Exports the graph as a .pdf too                                                     |
 | -v     | -Svg        | Exports the graph as a .svg too                                                     |
 
@@ -40,14 +39,20 @@ PresentMon-Grapher.exe -i "C:\presentmon-log.csv" -b 40
 PresentMon-Grapher.exe -i "C:\presentmon-log.csv" -d light
 ```
 
-### Show Preview Window
+### Export PDF too
 
 ```cmd
-PresentMon-Grapher.exe -i "C:\presentmon-log.csv" -s
+PresentMon-Grapher.exe -i "C:\presentmon-log.csv" -p
+```
+
+### Export SVG too
+
+```cmd
+PresentMon-Grapher.exe -i "C:\presentmon-log.csv" -v
 ```
 
 ### All Options Combined
 
 ```cmd
-PresentMon-Grapher.exe -i "C:\presentmon-log.csv" -o "C:\presentmon-log.png" -b 40 -d light -s
+PresentMon-Grapher.exe -i "C:\presentmon-log.csv" -o "C:\presentmon-log.png" -b 40 -d light -p -v
 ```
