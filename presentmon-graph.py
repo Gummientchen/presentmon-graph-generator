@@ -131,7 +131,7 @@ def main():
     print("saving graphs...")
     plt.savefig(outputFilename)
             
-    plt.show()
+    # plt.show()
     
     # print(logs.columns)
     print("All Done!")
