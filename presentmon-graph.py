@@ -57,6 +57,11 @@ def main():
     
     gs = fig.add_gridspec(5,2, height_ratios=[1.5, 1, 1, 0.5, 0.5])
     
+    avgFps = round(1000/logs["FrameTime"].mean(), 1)
+    avgFps999 = round(1000/logs["FrameTime"].quantile(0.999).mean(), 1)
+    avgFps99 = round(1000/logs["FrameTime"].quantile(0.99).mean(), 1)
+    avgFps95 = round(1000/logs["FrameTime"].quantile(0.95).mean(), 1)
+    
     axsFrametime = fig.add_subplot(gs[0, :])
     axsFrametime.set_title("FrameTime")
     axsFrametime.set_xlabel("frames")
@@ -64,13 +69,19 @@ def main():
     axsFrametime.plot(logs["FrameTime"], linewidth=0.25, label="raw")
     axsFrametime.plot(movingaverage(logs["FrameTime"], 50), linewidth=1, alpha=0.8, label="average")
     axsFrametime.legend(loc='upper right')
+    axsFrametime.text(0.01, 0.95,
+                      "Average:\n5% lows:\n1% lows:\n0.1% lows:",
+                      fontsize=12, horizontalalignment='left', verticalalignment='top', transform=axsFrametime.transAxes)
+    axsFrametime.text(0.15, 0.95,
+                      str(avgFps)+" fps\n"+str(avgFps95)+" fps\n"+str(avgFps99)+" fps\n"+str(avgFps999)+" fps",
+                      fontsize=12, horizontalalignment='right', verticalalignment='top', transform=axsFrametime.transAxes)
     
     axsCPUBusyHistogram = fig.add_subplot(gs[1:3, 0])
     axsCPUBusyHistogram.set_title("CPU/GPU Busy Histogram")
     axsCPUBusyHistogram.set_xlabel("ms")
     axsCPUBusyHistogram.set_ylabel("frames")
-    axsCPUBusyHistogram.hist(logs["CPUBusy"], bins=n_bins, rwidth=0.9, label="CPUBusy")
-    axsCPUBusyHistogram.hist(logs["GPUBusy"], bins=n_bins, rwidth=0.9, label="GPUBusy", alpha=0.75)
+    axsCPUBusyHistogram.hist(logs["CPUBusy"], bins=n_bins, rwidth=0.9, label="CPUBusy", log=True)
+    axsCPUBusyHistogram.hist(logs["GPUBusy"], bins=n_bins, rwidth=0.9, label="GPUBusy", alpha=0.75, log=True)
     axsCPUBusyHistogram.legend(loc='upper right')
     
     # axsGPUBusyHistogram = fig.add_subplot(gs[2, 0])
@@ -84,7 +95,7 @@ def main():
     axsFrametimeHistogram.set_title("FrameTime Histogram")
     axsFrametimeHistogram.set_xlabel("ms")
     axsFrametimeHistogram.set_ylabel("frames")
-    axsFrametimeHistogram.hist(logs["FrameTime"], bins=n_bins, rwidth=0.9)
+    axsFrametimeHistogram.hist(logs["FrameTime"], bins=n_bins, rwidth=0.9, log=True)
     
     axsClickToPhoton = fig.add_subplot(gs[2, 1])
     axsClickToPhoton.set_title("Click-to-Photon Latency")
@@ -114,10 +125,13 @@ def main():
     # axsCpuUtilization.legend(loc='upper center', bbox_to_anchor=(1, 2))
     axsCpuUtilization.legend(loc='upper right')
     
+    # add some basic data
+    # fig.figte
+    
     print("saving graphs...")
     plt.savefig(outputFilename)
             
-    # plt.show()
+    plt.show()
     
     # print(logs.columns)
     print("All Done!")
