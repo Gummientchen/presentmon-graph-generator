@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+import matplotlib.backends.backend_cairo
 import numpy as np
 import pandas as pd
 import argparse
