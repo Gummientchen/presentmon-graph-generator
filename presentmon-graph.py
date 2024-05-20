@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 import argparse
 import os
+from pathlib import Path
 
 # Defaults
 inputFilename = "input.csv"
@@ -33,7 +34,8 @@ def main():
     if args.Output:
         outputFilename = args.Output
     else:
-        outputFilename = applicationName + "_" + str(processId) + ".png"
+        outputFilename = Path(inputFilename).stem + ".png"
+        # outputFilename = applicationName + "_" + str(processId) + ".png"
         inputDir = os.path.dirname(os.path.abspath(inputFilename))
         outputFilename = os.path.join(inputDir, outputFilename)
     
