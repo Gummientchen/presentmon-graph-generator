@@ -1,9 +1,13 @@
 import matplotlib.pyplot as plt
+import matplotlib.backends.backend_cairo
 import numpy as np
 import pandas as pd
 import argparse
 import os
 from pathlib import Path
+from matplotlib import use as mpluse
+
+mpluse("Cairo")
 
 # Defaults
 inputFilename = "input.csv"
@@ -16,7 +20,6 @@ parser.add_argument("-o", "--Output", help = "Output File Path (.png). Default g
 parser.add_argument("-t", "--Title", help = "Graph title shown at the top of generated image.")
 parser.add_argument("-b", "--Bins", help = "How many bins should be used for histograms. Default 20", default=20, type=int)
 parser.add_argument("-d", "--Theme", help = "Switch between light and dark mode. Default 'dark'", choices=['dark', 'light'], default="dark")
-parser.add_argument("-s", "--ShowWindow", help = "Enable a window whichs shows the generated graph on screen.", action='store_true')
 parser.add_argument("-p", "--Pdf", help = "Exports the graph as a .pdf too", action='store_true')
 parser.add_argument("-v", "--Svg", help = "Exports the graph as a .svg too", action='store_true')
 args = parser.parse_args()
@@ -165,10 +168,6 @@ def main():
         plt.savefig(outputFilenameSvg)
           
     print("All Done!")
-    
-    # Show windows if enabled
-    if args.ShowWindow:
-        plt.show()
     
     
 
