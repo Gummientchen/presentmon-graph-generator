@@ -4,6 +4,9 @@ import pandas as pd
 import argparse
 import os
 from pathlib import Path
+from matplotlib import use as mpluse
+
+mpluse("all")
 
 # Defaults
 inputFilename = "input.csv"
