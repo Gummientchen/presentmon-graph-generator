@@ -1,0 +1,24 @@
+name: 'Build executable for Windows'
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: '${{ github.workflow }} @ ${{ github.event.pull_request.head.label || github.head_ref || github.ref }}'
+  cancel-in-progress: true
+
+jobs:
+  pyinstaller-build:
+    runs-on: windows-latest
+    steps:
+      - name: Create Executable
+        uses: sayyid5416/pyinstaller@v1
+        with:
+          python_ver: '3.11.5'
+          spec: 'presentmon-graph.py'
+          requirements: 'requirements.txt'
+          upload_exe_with_name: 'PresentMon-Grapher'
+          options: --onefile, --name "PresentMon-Grapher"
