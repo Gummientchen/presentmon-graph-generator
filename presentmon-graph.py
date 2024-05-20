@@ -17,6 +17,8 @@ parser.add_argument("-t", "--Title", help = "Graph title shown at the top of gen
 parser.add_argument("-b", "--Bins", help = "How many bins should be used for histograms. Default 20", default=20, type=int)
 parser.add_argument("-d", "--Theme", help = "Switch between light and dark mode. Default 'dark'", choices=['dark', 'light'], default="dark")
 parser.add_argument("-s", "--ShowWindow", help = "Enable a window whichs shows the generated graph on screen.", action='store_true')
+parser.add_argument("-p", "--Pdf", help = "Exports the graph as a .pdf too", action='store_true')
+parser.add_argument("-v", "--Svg", help = "Exports the graph as a .svg too", action='store_true')
 args = parser.parse_args()
 
 if args.Input:
@@ -54,19 +56,22 @@ def main():
     # auto generate output if not specified
     if args.Output:
         outputFilename = args.Output
+        outputDir = os.path.dirname(os.path.abspath(outputFilename))
     else:
         outputFilename = Path(inputFilename).stem + ".png"
-        # outputFilename = applicationName + "_" + str(processId) + ".png"
-        inputDir = os.path.dirname(os.path.abspath(inputFilename))
-        outputFilename = os.path.join(inputDir, outputFilename)
+        outputDir = os.path.dirname(os.path.abspath(inputFilename))
+        
+    outputFilenamePdf = Path(outputFilename).stem + ".pdf"
+    outputFilenameSvg = Path(outputFilename).stem + ".svg"
+    outputFilenamePdf = os.path.join(outputDir, outputFilenamePdf)
+    outputFilenameSvg = os.path.join(outputDir, outputFilenameSvg)
     
+    
+    # start graph generation
     print("generating graphs...")
     fig = plt.figure(tight_layout=True)
     
     fig.patch.set_facecolor(color["background"])
-    
-    
-    
     fig.set_size_inches(420/25.4, 320/25.4)
     
     # Set colors
@@ -89,11 +94,13 @@ def main():
     
     gs = fig.add_gridspec(5,2, height_ratios=[1.5, 1, 1, 0.5, 0.5])
     
+    # calculate FPS stats
     avgFps = round(1000/logs["FrameTime"].mean(), 1)
     avgFps999 = round(1000/logs["FrameTime"].quantile(0.999).mean(), 1)
     avgFps99 = round(1000/logs["FrameTime"].quantile(0.99).mean(), 1)
     avgFps95 = round(1000/logs["FrameTime"].quantile(0.95).mean(), 1)
     
+    # create graphs
     axsFrametime = fig.add_subplot(gs[0, :])
     axsFrametime.set_title("FrameTime")
     axsFrametime.set_xlabel("frames")
@@ -134,12 +141,10 @@ def main():
     axsGPUPower.set_ylabel("Watt")
     axsGPUPower.plot(logs["GPUPower"], linewidth=1, color="orange", label="Power")
     axsGPUPower.legend(loc='upper left')
-    
     tempaxs = axsGPUPower.twinx()
     tempaxs.set_ylabel("°C")
     tempaxs.plot(logs["GPUTemperature"], linewidth=1, color="red", label="Temperature")
     tempaxs.legend(loc='upper right')
-    
     
     axsCpuUtilization = fig.add_subplot(gs[4, :])
     axsCpuUtilization.set_title("CPU/GPU Utilization")
@@ -149,9 +154,15 @@ def main():
     axsCpuUtilization.plot(logs["GPUUtilization"], linewidth=1, label="GPU")
     axsCpuUtilization.legend(loc='upper right')
     
-    
+    # save
     print("saving graphs...")
     plt.savefig(outputFilename)
+    
+    if args.Pdf:
+        plt.savefig(outputFilenamePdf)
+    
+    if args.Svg:   
+        plt.savefig(outputFilenameSvg)
           
     print("All Done!")
     

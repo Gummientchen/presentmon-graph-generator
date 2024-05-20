@@ -13,6 +13,8 @@ This tool helps visualize PresentMon logs.
 | -b     | -Bins       | Defines how many bins should be used for histograms                                 |
 | -d     | -Theme      | Lets you choose between dark and light mode. Default dark. Options: "dark", "light" |
 | -s     | -ShowWindow | If set shows a preview window of the graph (image still gets stored)                |
+| -p     | -Pdf        | Exports the graph as a .pdf too                                                     |
+| -v     | -Svg        | Exports the graph as a .svg too                                                     |
 
 ## Examples
 
