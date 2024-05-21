@@ -94,9 +94,11 @@ def main():
     
     # Set title
     if args.Title:
-        fig.suptitle(args.Title)
+        suptitle = args.Title
     else:
-        fig.suptitle("PresentMon - "+applicationName+" - PID:"+str(processId), fontsize=16, horizontalalignment="left", x=0.0435)
+        suptitle = "PresentMon - "+applicationName+" - PID:"+str(processId)
+        
+    fig.suptitle(suptitle, fontsize=16, horizontalalignment="left", x=0.0435)
     
     fig.canvas.manager.set_window_title('PresentMon - Results')
     
