@@ -167,8 +167,9 @@ def main():
     axsCPUBusyHistogram.set_title("CPU/GPU Busy Histogram", loc='left')
     axsCPUBusyHistogram.set_xlabel("ms")
     axsCPUBusyHistogram.set_ylabel("frames")
-    axsCPUBusyHistogram.hist(logs["CPUBusy"], bins=n_bins, rwidth=0.9, label="CPUBusy", log=True)
-    axsCPUBusyHistogram.hist(logs["GPUBusy"], bins=n_bins, rwidth=0.9, label="GPUBusy", alpha=0.75, log=True)
+    bins = np.histogram(np.hstack((logs["CPUBusy"], logs["GPUBusy"])), bins=n_bins)[1]
+    axsCPUBusyHistogram.hist(logs["CPUBusy"], bins, rwidth=0.9, label="CPUBusy", log=True)
+    axsCPUBusyHistogram.hist(logs["GPUBusy"], bins, rwidth=0.9, label="GPUBusy", alpha=0.75, log=True)
     axsCPUBusyHistogram.legend(loc='upper right')
     
     axsFrametimeHistogram = fig.add_subplot(gs[2, 1])
