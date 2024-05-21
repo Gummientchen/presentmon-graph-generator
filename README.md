@@ -2,6 +2,8 @@
 
 This tool helps visualize PresentMon logs.
 
+![Example of the generated PNG](/assets/screenshot1.png)
+
 ## Basic usage:
 
 | Option | Long Option | Description                                                                         |
