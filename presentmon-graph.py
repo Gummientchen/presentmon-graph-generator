@@ -64,10 +64,12 @@ def main():
         outputFilename = Path(inputFilename).stem + ".png"
         outputDir = os.path.dirname(os.path.abspath(inputFilename))
         
+        
     outputFilenamePdf = Path(outputFilename).stem + ".pdf"
     outputFilenameSvg = Path(outputFilename).stem + ".svg"
     outputFilenamePdf = os.path.join(outputDir, outputFilenamePdf)
     outputFilenameSvg = os.path.join(outputDir, outputFilenameSvg)
+    outputFilename = os.path.join(outputDir, outputFilename)
     
     
     # start graph generation
