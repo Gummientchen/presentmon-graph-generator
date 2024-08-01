@@ -9,6 +9,7 @@ from matplotlib import use as mpluse
 
 mpluse("Cairo")
 pd.options.mode.copy_on_write = True
+pd.options.display.min_rows = 100
 
 # Defaults
 inputFilename = "input.csv"
@@ -104,18 +105,50 @@ def main():
     
     gs = fig.add_gridspec(6,2, height_ratios=[0.5, 1.5, 1, 1, 0.5, 0.5])
     
+    logs['movingaverage'] = pd.Series(movingaverage(logs["FrameTime"], 50))
+    logs['movingaverage'] = logs.movingaverage.shift(25)
+    
+    
     # calculate stats
     numberOfFrames = len(logs.index)
+    print("Number of Frames:", numberOfFrames)
+    
     smoothness = getSmoothness(logs)
+    print("Smoothness:", round(smoothness,1))
+    
     maxFps = getMaxFps(logs)
     minFps = getMinFps(logs)
+    print("Max FPS:", round(maxFps,2))
+    print("Min FPS:", round(minFps,2))
+    
     avgFps = round(1000/logs["FrameTime"].mean(), 1)
     avgFps999 = round(1000/logs["FrameTime"].quantile(0.999).mean(), 1)
     avgFps99 = round(1000/logs["FrameTime"].quantile(0.99).mean(), 1)
     avgFps95 = round(1000/logs["FrameTime"].quantile(0.95).mean(), 1)
+    print("Average FPS:", avgFps)
+    print("5% Lows FPS:", avgFps95)
+    print("1% Lows FPS:", avgFps99)
+    print("0.1% Lows FPS:", avgFps999)
+    
+    avgFrametime = getAvgFrametime(logs)
+    iqr = getIQR(logs)
+    slowFrames, slowFramesPercentage = countFrameTimesGreaterThanAverage(logs, avgFrametime, 10)
+    
+    
+    
+    print("Average FrameTime:", round(avgFrametime,3))
+    print("IQR:", round(iqr,3))
+    print("Outliers > 10*avg:", slowFrames)
+    
     gpuMaxPower = getMaxPower(logs)
     gpuMinPower = getMinPower(logs)
     gpuAveragePower = getAveragePower(logs)
+    print("Max GPU Power:", round(gpuMaxPower,1))
+    print("Min GPU Power:", round(gpuMinPower,1))
+    print("Average GPU Power:", round(gpuAveragePower,1))
+    
+    
+    
     
     # Special empty fig for some general statistics in text form
     axsInformation = fig.add_subplot(gs[0, :])
@@ -124,7 +157,7 @@ def main():
     
     statsOffset = -0.055
     axsInformation.text(0.0, 0.95,
-                      "Frames:\nSmoothness:\nMax FPS:\nMin FPS:",
+                      "Frames:\nSmoothness:\nStutter:\nMax FPS:\nMin FPS:",
                       fontsize=10, horizontalalignment='left', verticalalignment='top', transform=axsInformation.transAxes)
     axsInformation.text(0.1975+statsOffset, 0.95,
                       str("{:1.0f}".format(numberOfFrames))+" frames",
@@ -133,7 +166,7 @@ def main():
                       "\n"+str("{:1.1f}".format(smoothness)),
                       fontsize=10, horizontalalignment='right', verticalalignment='top', transform=axsInformation.transAxes)
     axsInformation.text(0.179+statsOffset, 0.95,
-                      "\n\n"+str("{:1.1f}".format(maxFps))+" fps\n"+str("{:1.1f}".format(minFps))+" fps",
+                      "\n\n\n"+str("{:1.1f}".format(maxFps))+" fps\n"+str("{:1.1f}".format(minFps))+" fps",
                       fontsize=10, horizontalalignment='right', verticalalignment='top', transform=axsInformation.transAxes)
     
     statsOffset = -0.03
@@ -160,7 +193,7 @@ def main():
     axsFrametime.set_xlabel("frames")
     axsFrametime.set_ylabel("ms")
     axsFrametime.plot(logs["FrameTime"], linewidth=0.25, label="raw")
-    axsFrametime.plot(movingaverage(logs["FrameTime"], 50), linewidth=1, alpha=0.8, label="average")
+    axsFrametime.plot(logs["movingaverage"], linewidth=1, alpha=0.8, label="average")
     axsFrametime.legend(loc='upper right')
     
     axsCPUBusyHistogram = fig.add_subplot(gs[2:4, 0])
@@ -219,10 +252,11 @@ def main():
 def getMaxFps(log):
     return 1000/log["FrameTime"].min()
 
-
 def getMinFps(log):
     return 1000/log["FrameTime"].max()
 
+def getAvgFrametime(log):
+    return log["FrameTime"].mean()
 
 def getMaxPower(log):
     return log["GPUPower"].max()
@@ -233,6 +267,32 @@ def getMinPower(log):
 def getAveragePower(log):
     return log.loc[:, "GPUPower"].mean()
 
+def getIQR(log):
+    log = log.reset_index()
+    Q1 = log["FrameTime"].quantile(0.25)
+    Q3 = log["FrameTime"].quantile(0.75)
+    
+    IQR = Q3 - Q1
+    
+    return IQR
+
+def countFrameTimesGreaterThanAverage(log, averageFrameTime, multiplier = 5):
+    maxFrameTime = averageFrameTime * multiplier
+    
+    log = log[log['FrameTime'] < maxFrameTime*2]
+    log = log.reset_index()
+    framecount = len(log.index)
+    
+    FrameTimes = log['FrameTime']
+    outliers = FrameTimes[FrameTimes > maxFrameTime].count()
+    
+    if(framecount > 0):
+        outliersPercentage = outliers / framecount
+    else:
+        outliersPercentage = 0
+    
+    return outliers, outliersPercentage
+    
 
 # calculates the smoothness factor
 def getSmoothness(log):
