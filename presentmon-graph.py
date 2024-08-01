@@ -52,7 +52,7 @@ else:
 
 def main():
     print("loading input file...")
-    logs = pd.read_csv(inputFilename, usecols=['Application','ProcessID','FrameTime','CPUBusy','GPUBusy','ClickToPhotonLatency','GPUTemperature','GPUUtilization','CPUUtilization','GPUPower'])
+    logs = pd.read_csv(inputFilename, usecols=['Application','ProcessID','FrameTime','CPUBusy','GPUBusy','ClickToPhotonLatency','GPUTemperature','GPUUtilization','CPUUtilization','GPUPower','CPUStartTime','AnimationError'])
     
     applicationName = logs["Application"][0]
     applicationName = applicationName.replace(".exe", "")
@@ -111,7 +111,9 @@ def main():
     
     # calculate stats
     numberOfFrames = len(logs.index)
+    duration = logs['CPUStartTime'].iloc[-1]
     print("Number of Frames:", numberOfFrames)
+    print("Duration:", duration, "Seconds")
     
     smoothness = getSmoothness(logs)
     print("Smoothness:", round(smoothness,1))
@@ -136,16 +138,33 @@ def main():
     
     
     
-    print("Average FrameTime:", round(avgFrametime,3))
-    print("IQR:", round(iqr,3))
+    print("Average FrameTime:", round(avgFrametime,3), "ms")
+    print("IQR:", round(iqr,3), "ms")
     print("Outliers > 10*avg:", slowFrames)
     
     gpuMaxPower = getMaxPower(logs)
     gpuMinPower = getMinPower(logs)
     gpuAveragePower = getAveragePower(logs)
-    print("Max GPU Power:", round(gpuMaxPower,1))
-    print("Min GPU Power:", round(gpuMinPower,1))
-    print("Average GPU Power:", round(gpuAveragePower,1))
+    print("Max GPU Power:", round(gpuMaxPower,1), "W")
+    print("Min GPU Power:", round(gpuMinPower,1), "W")
+    print("Average GPU Power:", round(gpuAveragePower,1), "W")
+    
+    logs = absoluteAnimationError(logs)
+    maxAnimationError = logs["absoluteAnimationError"].max()
+    avgAnimationError = logs["absoluteAnimationError"].mean()
+    animationError9999 = logs["absoluteAnimationError"].quantile(0.9999)
+    animationError999 = logs["absoluteAnimationError"].quantile(0.999)
+    animationError99 = logs["absoluteAnimationError"].quantile(0.99)
+    animationError95 = logs["absoluteAnimationError"].quantile(0.95)
+    print("Max Animation Error:", round(maxAnimationError, 3), "ms")
+    print("Average Animation Error:", round(avgAnimationError, 3), "ms")
+    print("5% Animation Error:", round(animationError95, 3), "ms")
+    print("1% Animation Error:", round(animationError99, 3), "ms")
+    print("0.1% Animation Error:", round(animationError999, 3), "ms")
+    print("0.01% Animation Error:", round(animationError9999, 3), "ms")
+    
+    # logs = logs.drop(columns=['Application', 'ProcessID', 'CPUStartTime'])
+    # print(logs.std())
     
     
     
@@ -326,6 +345,13 @@ def movingaverage(interval, window_size):
     window = np.ones(int(window_size))/float(window_size)
     return np.convolve(interval, window, 'valid')
 
+def absoluteAnimationError(log):
+    log['absoluteAnimationError'] = log.apply(calcAbsAnimationError, axis=1)
+    
+    return log
+
+def calcAbsAnimationError(row):
+    return abs(row['AnimationError'])
 
 if __name__ == "__main__":
     main()
