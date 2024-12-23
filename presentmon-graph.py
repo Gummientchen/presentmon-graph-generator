@@ -1,3 +1,4 @@
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 import matplotlib.backends.backend_cairo
 import numpy as np
@@ -6,12 +7,18 @@ import argparse
 import os
 from pathlib import Path
 from matplotlib import use as mpluse
+from scipy import stats
+
+mpl.rcParams['figure.dpi'] = 150
 
 mpluse("Cairo")
 pd.options.mode.copy_on_write = True
+pd.options.display.min_rows = 100
 
 # Defaults
 inputFilename = "input.csv"
+presentmonVersion = ">=2.3.0"
+CPUorGPUlimited = "n/A"
 
 msg = "Parses a PresentMon log and creates graphs"
 
@@ -23,6 +30,7 @@ parser.add_argument("-b", "--Bins", help = "How many bins should be used for his
 parser.add_argument("-d", "--Theme", help = "Switch between light and dark mode. Default 'dark'", choices=['dark', 'light'], default="dark")
 parser.add_argument("-p", "--Pdf", help = "Exports the graph as a .pdf too", action='store_true')
 parser.add_argument("-v", "--Svg", help = "Exports the graph as a .svg too", action='store_true')
+parser.add_argument("-f", "--DisableFiltering", help = "Disables filtering on latency graphs", action='store_true')
 args = parser.parse_args()
 
 if args.Input:
@@ -51,7 +59,14 @@ else:
 
 def main():
     print("loading input file...")
-    logs = pd.read_csv(inputFilename, usecols=['Application','ProcessID','FrameTime','CPUBusy','GPUBusy','ClickToPhotonLatency','GPUTemperature','GPUUtilization','CPUUtilization','GPUPower'])
+    try:
+        # Presentmon 2.3.0
+        logs = pd.read_csv(inputFilename, usecols=['Application','ProcessID','FrameTime','CPUBusy','GPUBusy','ClickToPhotonLatency','GPUTemperature','GPUUtilization','CPUUtilization','GPUPower','CPUStartTime','AnimationError','DisplayLatency','AllInputToPhotonLatency','GPUWait','CPUWait'])
+        presentmonVersion = ">=2.3.0"
+    except:
+        # Presentmon <=2.3.0
+        print("please use PresentMon 2.3.0 or newer")
+        exit()
     
     applicationName = logs["Application"][0]
     applicationName = applicationName.replace(".exe", "")
@@ -79,7 +94,7 @@ def main():
     fig = plt.figure(tight_layout=True)
     
     fig.patch.set_facecolor(color["background"])
-    fig.set_size_inches(420/25.4, 280/25.4)
+    fig.set_size_inches(270/25.4*2, 180/25.4*2)
     
     # Set colors
     plt.rcParams['axes.facecolor'] = color['background']
@@ -102,26 +117,142 @@ def main():
     
     fig.canvas.manager.set_window_title('PresentMon - Results')
     
-    gs = fig.add_gridspec(6,2, height_ratios=[0.5, 1.5, 1, 1, 0.5, 0.5])
+    gs = fig.add_gridspec(7,2, height_ratios=[0.5, 1.5, 1, 1, 1, 0.5, 0.5])
+    
+    logs['movingaverage'] = pd.Series(movingaverage(logs["FrameTime"], 50))
+    logs['movingaverage'] = logs.movingaverage.shift(25)
+    
     
     # calculate stats
     numberOfFrames = len(logs.index)
+    duration = logs['CPUStartTime'].iloc[-1]
+    print("Number of Frames:", numberOfFrames)
+    print("Duration:", duration, "Seconds")
+    
     smoothness = getSmoothness(logs)
+    print("Smoothness:", round(smoothness,1))
+    
     maxFps = getMaxFps(logs)
     minFps = getMinFps(logs)
+    print("Max FPS:", round(maxFps,2))
+    print("Min FPS:", round(minFps,2))
+    
     avgFps = round(1000/logs["FrameTime"].mean(), 1)
     avgFps999 = round(1000/logs["FrameTime"].quantile(0.999).mean(), 1)
     avgFps99 = round(1000/logs["FrameTime"].quantile(0.99).mean(), 1)
     avgFps95 = round(1000/logs["FrameTime"].quantile(0.95).mean(), 1)
+    print("Average FPS:", avgFps)
+    print("5% Lows FPS:", avgFps95)
+    print("1% Lows FPS:", avgFps99)
+    print("0.1% Lows FPS:", avgFps999)
+    
+    avgFrametime = getAvgFrametime(logs)
+    iqr = getIQR(logs)
+    slowFrames, slowFramesPercentage = countFrameTimesGreaterThanAverage(logs, avgFrametime, 10)
+    
+    
+    
+    print("Average FrameTime:", round(avgFrametime,3), "ms")
+    print("IQR:", round(iqr,3), "ms")
+    print("Outliers > 10*avg:", slowFrames)
+    
     gpuMaxPower = getMaxPower(logs)
     gpuMinPower = getMinPower(logs)
     gpuAveragePower = getAveragePower(logs)
+    print("Max GPU Power:", round(gpuMaxPower,1), "W")
+    print("Min GPU Power:", round(gpuMinPower,1), "W")
+    print("Average GPU Power:", round(gpuAveragePower,1), "W")
+    
+    logs = absoluteAnimationError(logs)
+    maxAnimationError = logs["absoluteAnimationError"].max()
+    avgAnimationError = logs["absoluteAnimationError"].mean()
+    animationError9999 = logs["absoluteAnimationError"].quantile(0.9999)
+    animationError999 = logs["absoluteAnimationError"].quantile(0.999)
+    animationError99 = logs["absoluteAnimationError"].quantile(0.99)
+    animationError95 = logs["absoluteAnimationError"].quantile(0.95)
+    print("Max Animation Error:", round(maxAnimationError, 3), "ms")
+    print("Average Animation Error:", round(avgAnimationError, 3), "ms")
+    print("5% Animation Error:", round(animationError95, 3), "ms")
+    print("1% Animation Error:", round(animationError99, 3), "ms")
+    print("0.1% Animation Error:", round(animationError999, 3), "ms")
+    print("0.01% Animation Error:", round(animationError9999, 3), "ms")
+    
+    # Filter DisplayLatency, AllInputToPhotonLatency, ClickToPhotonLatency if not diabled by argument "DisableFiltering"
+    if args.DisableFiltering:
+        filteredLogs = logs
+        print("Latency Graph Filtering disabled")
+        filterText = ""
+    else:
+        print("Latency Graph Filtering enabled")
+        filterText = " (filtered)"
+        threshold = 0.1
+        zDisplayLatency = np.abs(stats.zscore(logs['DisplayLatency']))
+        outlierszDisplayLatency = logs[zDisplayLatency > threshold]
+        zAllInputToPhotonLatency = np.abs(stats.zscore(logs['AllInputToPhotonLatency']))
+        outlierszAllInputToPhotonLatency = logs[zAllInputToPhotonLatency > threshold]
+        zClickToPhotonLatency = np.abs(stats.zscore(logs['ClickToPhotonLatency']))
+        outlierszClickToPhotonLatency = logs[zClickToPhotonLatency > threshold]
+        
+        filteredLogs = logs
+        
+        filteredLogs = filteredLogs.drop(outlierszDisplayLatency.index)
+        filteredLogs = filteredLogs.drop(outlierszAllInputToPhotonLatency.index)
+        filteredLogs = filteredLogs.drop(outlierszClickToPhotonLatency.index)
+    
+    # Calculate limiting hardware: CPU or CPU
+    threshold = 0.1
+    zCPUWait = np.abs(stats.zscore(logs['CPUWait']))
+    outlierszCPUWait = logs[zCPUWait > threshold]
+    zGPUWait = np.abs(stats.zscore(logs['GPUWait']))
+    outlierszGPUWait = logs[zGPUWait > threshold]
+    
+    logs.loc[zCPUWait > threshold, 'CPUWaitZ'] = logs['CPUWait'].median()
+    logs.loc[zGPUWait > threshold, 'GPUWaitZ'] = logs['GPUWait'].median()
+    
+    sumCPUWait = logs["CPUWaitZ"].sum()
+    sumGPUWait = logs["GPUWaitZ"].sum()
+    sumCPUWait += 0.0001
+    sumGPUWait += 0.0001
+    
+    performanceLimit = sumCPUWait / sumGPUWait
+    performanceLimitInverse = 1 / performanceLimit
+    
+    # check how CPU limited the system is
+    if(performanceLimit >= 20):
+        CPUorGPUlimited = "Extremly CPU Limited"
+    elif(performanceLimit >= 10):
+        CPUorGPUlimited = "Very CPU Limited"
+    elif(performanceLimit >= 2):
+        CPUorGPUlimited = "Slightly CPU Limited"
+        
+    # check how GPU limited the system is
+    if(performanceLimitInverse >= 20):
+        CPUorGPUlimited = "Extremly GPU Limited"
+    elif(performanceLimitInverse >= 10):
+        CPUorGPUlimited = "Very GPU Limited"
+    elif(performanceLimitInverse >= 2):
+        CPUorGPUlimited = "Slightly GPU Limited"
+
+    # check if system is balanced
+    if(performanceLimit < 2 and performanceLimitInverse < 2):
+        CPUorGPUlimited = "Balanced"
+    
+    print("CPU or GPU Limited?:", CPUorGPUlimited, "/", round(performanceLimit, 2))
+    
+    
+    
+    # logs = logs.drop(columns=['Application', 'ProcessID', 'CPUStartTime'])
+    # print(logs.std())
+    
+    
+    
     
     # Special empty fig for some general statistics in text form
     axsInformation = fig.add_subplot(gs[0, :])
     axsInformation.axis('off')
     axsInformation.set_title("\nInformation", loc='left')
     
+    # General Stats
     statsOffset = -0.055
     axsInformation.text(0.0, 0.95,
                       "Frames:\nSmoothness:\nMax FPS:\nMin FPS:",
@@ -136,6 +267,7 @@ def main():
                       "\n\n"+str("{:1.1f}".format(maxFps))+" fps\n"+str("{:1.1f}".format(minFps))+" fps",
                       fontsize=10, horizontalalignment='right', verticalalignment='top', transform=axsInformation.transAxes)
     
+    # FPS Stats
     statsOffset = -0.03
     axsInformation.text(0.25+statsOffset, 0.95,
                       "Average:\n5% lows:\n1% lows:\n0.1% lows:",
@@ -145,6 +277,7 @@ def main():
                       str("{:4.1f}".format(avgFps))+" fps\n"+str("{:4.1f}".format(avgFps95))+" fps\n"+str("{:4.1f}".format(avgFps99))+" fps\n"+str("{:4.1f}".format(avgFps999))+" fps",
                       fontsize=10, horizontalalignment='right', verticalalignment='top', transform=axsInformation.transAxes)
     
+    # GPU Stats
     statsOffset = 0
     axsInformation.text(0.42+statsOffset, 0.95,
                       "GPU Max Power:\nGPU Min Power:\nGPU Average Power:",
@@ -153,6 +286,19 @@ def main():
     axsInformation.text(0.57+statsOffset, 0.95,
                       str("{:4.1f}".format(gpuMaxPower))+" W\n"+str("{:4.1f}".format(gpuMinPower))+" W\n"+str("{:4.1f}".format(gpuAveragePower))+" W",
                       fontsize=10, horizontalalignment='right', verticalalignment='top', transform=axsInformation.transAxes)
+
+    # CPU or GPU Limited
+    statsOffset = 0.22
+    axsInformation.text(0.42+statsOffset, 0.95,
+                      "CPU or GPU limited:",
+                      fontsize=10, horizontalalignment='left', verticalalignment='top', transform=axsInformation.transAxes)
+    statsOffset = 0.22
+    axsInformation.text(0.505+statsOffset, 0.95,
+                      CPUorGPUlimited,
+                      fontsize=10, horizontalalignment='left', verticalalignment='top', transform=axsInformation.transAxes)
+    
+    
+    
     
     # create graphs
     axsFrametime = fig.add_subplot(gs[1, :])
@@ -160,7 +306,7 @@ def main():
     axsFrametime.set_xlabel("frames")
     axsFrametime.set_ylabel("ms")
     axsFrametime.plot(logs["FrameTime"], linewidth=0.25, label="raw")
-    axsFrametime.plot(movingaverage(logs["FrameTime"], 50), linewidth=1, alpha=0.8, label="average")
+    axsFrametime.plot(logs["movingaverage"], linewidth=1, alpha=0.8, label="average")
     axsFrametime.legend(loc='upper right')
     
     axsCPUBusyHistogram = fig.add_subplot(gs[2:4, 0])
@@ -172,19 +318,34 @@ def main():
     axsCPUBusyHistogram.hist(logs["GPUBusy"], bins, rwidth=0.9, label="GPUBusy", alpha=0.75, log=True)
     axsCPUBusyHistogram.legend(loc='upper right')
     
-    axsFrametimeHistogram = fig.add_subplot(gs[2, 1])
+    axsFrametimeHistogram = fig.add_subplot(gs[4, 0])
     axsFrametimeHistogram.set_title("FrameTime Histogram", loc='left')
     axsFrametimeHistogram.set_xlabel("ms")
     axsFrametimeHistogram.set_ylabel("frames")
     axsFrametimeHistogram.hist(logs["FrameTime"], bins=n_bins, rwidth=0.9, log=True)
     
-    axsClickToPhoton = fig.add_subplot(gs[3, 1])
-    axsClickToPhoton.set_title("Click-to-Photon Latency", loc='left')
-    axsClickToPhoton.set_xlabel("frames")
-    axsClickToPhoton.set_ylabel("ms")
-    axsClickToPhoton.plot(logs["ClickToPhotonLatency"], "+", color=color['lightplot'])
+    axsClickToPhoton = fig.add_subplot(gs[2, 1])
+    axsClickToPhoton.set_title("Click-to-Photon Latency"+filterText, loc='left')
+    axsClickToPhoton.set_xlabel("ms")
+    axsClickToPhoton.set_ylabel("frames")
+    # axsClickToPhoton.plot(filteredLogs["ClickToPhotonLatency"], "+", color=color['lightplot'])
+    axsClickToPhoton.hist(filteredLogs["ClickToPhotonLatency"], bins=n_bins, rwidth=0.9, log=False)
+
+    axsAllInputToPhotonLatency = fig.add_subplot(gs[3, 1])
+    axsAllInputToPhotonLatency.set_title("All Input To Photon Latency"+filterText, loc='left')
+    axsAllInputToPhotonLatency.set_xlabel("ms")
+    axsAllInputToPhotonLatency.set_ylabel("frames")
+    # axsAllInputToPhotonLatency.plot(filteredLogs["AllInputToPhotonLatency"], "+", color=color['lightplot'])
+    axsAllInputToPhotonLatency.hist(filteredLogs["AllInputToPhotonLatency"], bins=n_bins, rwidth=0.9, log=False)
+
+    axsDisplayLatency = fig.add_subplot(gs[4, 1])
+    axsDisplayLatency.set_title("Display Latency"+filterText, loc='left')
+    axsDisplayLatency.set_xlabel("ms")
+    axsDisplayLatency.set_ylabel("frames")
+    # axsDisplayLatency.plot(filteredLogs["DisplayLatency"], "+", color=color['lightplot'])
+    axsDisplayLatency.hist(filteredLogs["DisplayLatency"], bins=n_bins, rwidth=0.9, log=False)
     
-    axsGPUPower = fig.add_subplot(gs[4, :])
+    axsGPUPower = fig.add_subplot(gs[5, :])
     axsGPUPower.set_title("GPUPower/GPUTemperature", loc='left')
     axsGPUPower.set_xlabel("frames")
     axsGPUPower.set_ylabel("Watt")
@@ -192,10 +353,10 @@ def main():
     axsGPUPower.legend(loc='upper left')
     tempaxs = axsGPUPower.twinx()
     tempaxs.set_ylabel("°C")
-    tempaxs.plot(logs["GPUTemperature"], linewidth=1, color="red", label="Temperature")
+    tempaxs.plot(logs["GPUTemperature"], linewidth=1, color="red", label="Temp.")
     tempaxs.legend(loc='upper right')
     
-    axsCpuUtilization = fig.add_subplot(gs[5, :])
+    axsCpuUtilization = fig.add_subplot(gs[6, :])
     axsCpuUtilization.set_title("CPU/GPU Utilization", loc='left')
     axsCpuUtilization.set_xlabel("frames")
     axsCpuUtilization.set_ylabel("%")
@@ -204,13 +365,15 @@ def main():
     axsCpuUtilization.legend(loc='upper right')
     
     # save
-    print("saving graphs...")
+    print("saving PNG graph...")
     plt.savefig(outputFilename)
     
     if args.Pdf:
+        print("PDF genration enabled... generating PDF")
         plt.savefig(outputFilenamePdf)
     
-    if args.Svg:   
+    if args.Svg:
+        print("SVG genration enabled... generating SVG")
         plt.savefig(outputFilenameSvg)
           
     print("All Done!")
@@ -219,10 +382,11 @@ def main():
 def getMaxFps(log):
     return 1000/log["FrameTime"].min()
 
-
 def getMinFps(log):
     return 1000/log["FrameTime"].max()
 
+def getAvgFrametime(log):
+    return log["FrameTime"].mean()
 
 def getMaxPower(log):
     return log["GPUPower"].max()
@@ -233,6 +397,32 @@ def getMinPower(log):
 def getAveragePower(log):
     return log.loc[:, "GPUPower"].mean()
 
+def getIQR(log):
+    log = log.reset_index()
+    Q1 = log["FrameTime"].quantile(0.25)
+    Q3 = log["FrameTime"].quantile(0.75)
+    
+    IQR = Q3 - Q1
+    
+    return IQR
+
+def countFrameTimesGreaterThanAverage(log, averageFrameTime, multiplier = 5):
+    maxFrameTime = averageFrameTime * multiplier
+    
+    log = log[log['FrameTime'] < maxFrameTime*2]
+    log = log.reset_index()
+    framecount = len(log.index)
+    
+    FrameTimes = log['FrameTime']
+    outliers = FrameTimes[FrameTimes > maxFrameTime].count()
+    
+    if(framecount > 0):
+        outliersPercentage = outliers / framecount
+    else:
+        outliersPercentage = 0
+    
+    return outliers, outliersPercentage
+    
 
 # calculates the smoothness factor
 def getSmoothness(log):
@@ -266,6 +456,13 @@ def movingaverage(interval, window_size):
     window = np.ones(int(window_size))/float(window_size)
     return np.convolve(interval, window, 'valid')
 
+def absoluteAnimationError(log):
+    log['absoluteAnimationError'] = log.apply(calcAbsAnimationError, axis=1)
+    
+    return log
+
+def calcAbsAnimationError(row):
+    return abs(row['AnimationError'])
 
 if __name__ == "__main__":
     main()

@@ -4,3 +4,4 @@ pandas==2.1.1
 pycairo==1.26.0
 CairoSVG==2.6.0
 cairocffi==1.6.1
+scipy==1.14.1
